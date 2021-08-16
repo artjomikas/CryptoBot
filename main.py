@@ -1,5 +1,5 @@
 import configparser
-import json
+import json,re
 import asyncio
 from datetime import date, datetime
 
@@ -62,10 +62,10 @@ async def main(phone):
     my_channel = await client.get_entity(entity)
 
     offset_id = 0
-    limit = 100
+    limit = 50
     all_messages = []
-    total_messages = 10
-    total_count_limit = 10
+    total_messages = 1
+    total_count_limit = 1
 
     while True:
         print("Current Offset ID is:", offset_id, "; Total Messages:", total_messages)
@@ -94,3 +94,17 @@ async def main(phone):
 
 with client:
     client.loop.run_until_complete(main(phone))
+
+keywords = ("Coinbase will list","Coinbase Pro will list","Binance listing",)
+def lookingfor(keywords):
+    with open("channel_messages.json", "rb") as f:
+        data = json.load(f)
+        for line in data:
+            for word in keywords:
+                match = re.findall(word, line['message'])
+                match2 = re.findall("are now available",line['message'])
+                if  match and not match2:
+                    print(  "word matched: %s ==> date: %s" % (word, line['message']))
+
+
+lookingfor(keywords)
