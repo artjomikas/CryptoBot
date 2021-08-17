@@ -1,35 +1,41 @@
-import configparser
-import json
+from telethon import TelegramClient, events
+import asyncio
+from binance import Client
 
-from telethon import TelegramClient
-from telethon.errors import SessionPasswordNeededError
+api_key = 'kNjqHC6uvyoUc22LBZLlZpfbohxpvQAQHRLQpXh606Or8OvV8DQulhATbkMGGlSe'
+api_secret = 'XL4xiY17DskdyaMKv8Q7MTW2eiksrKuLHIGE4BCj53whMy9tE5KrDZ4kLpESZhHx'
 
-# no need for quotes
+api_id = 7233499
+api_hash = 'ae3e81cd552550ce66da4d2bbee1b77c'
 
+telegram_client = TelegramClient('session_id', api_id, api_hash)
+telegram_client.start()
 
-config = configparser.ConfigParser()
-config.read("config.ini")
-
-# Setting configuration values
-api_id = config['Telegram']['api_id']
-api_hash = config['Telegram']['api_hash']
-
-api_hash = str(api_hash)
-
-phone = config['Telegram']['phone']
-username = config['Telegram']['username']
-
+def main():
+    client = Client(api_key, api_secret)
+    res = client.get_account()
+    avg_price = client.get_avg_price(symbol='BNBUSDT')
+    print(avg_price)
+    print(client.response.headers)
 
 
 
 
-client = TelegramClient(username, api_id, api_hash)
-client.start()
-print("Client Created")
-# Ensure you're authorized
-if not client.is_user_authorized():
-    client.send_code_request(phone)
-    try:
-        client.sign_in(phone, input('Enter the code: '))
-    except SessionPasswordNeededError:
-        client.sign_in(password=input('Password: '))
+
+
+
+
+#
+# @client.on(events.NewMessage)
+# async def my_event_handler(event):
+#     if '1191110069' in str(event):
+#         if "Coinbase will list" or "Coinbase Pro will list" or "Binance listing" in event.message.message:
+#             if "are now available" not in event.message.message:
+#                 print("found")
+
+
+
+
+
+# client.run_until_disconnected()
+
