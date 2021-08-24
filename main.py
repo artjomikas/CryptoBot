@@ -1,14 +1,14 @@
 from __future__ import print_function
-from telethon import TelegramClient, events
-from binance import Client
-from pycoingecko import CoinGeckoAPI
-import gate_api
-from gate_api.exceptions import ApiException, GateApiException
+import hashlib
+import hmac
+import json
 import re
+import time
 import requests
-
-binance_api_key = 'UienLKHwrf4dulShFoGDNJfkGKyDj73zYJ00i4LTjh8DopNLuNpUP2PIgxLZ6dqY'
-binance_api_secret = 'rHmqQKP1KXs7M3gkcL5B9nBFqEI5gSuwHDQB65LZ3Qcx6kn5106NXPuCuge8Nzn9'
+from pycoingecko import CoinGeckoAPI
+from requests import Session
+from requests.exceptions import ConnectionError, Timeout, TooManyRedirects
+from telethon import TelegramClient, events
 
 telegram_api_id = 7233499
 telegram_api_hash = 'ae3e81cd552550ce66da4d2bbee1b77c'
@@ -17,118 +17,75 @@ telegram_client = TelegramClient('session_id', telegram_api_id, telegram_api_has
 telegram_client.start()
 
 cg = CoinGeckoAPI()
-
-final_list_of_coins = []
+coins_list = cg.get_coins_list()
 
 
 @telegram_client.on(events.NewMessage)
 async def my_event_handler(event):
-    if '1191110069' in str(event):
-        if "Coinbase will list" or "Coinbase Pro will list" or "Binance listing" in event.message.message:
-            if "now available" not in event.message.message:
-                list_of_symbols = re.findall(r'#\w+', event.message.message)
-                if "#Binance" in list_of_symbols:
-                    print("Binance here")
-                    remove_tag(list_of_symbols)
-                    print(final_list_of_coins)
-                    for coin in final_list_of_coins:
-                        get_coin_by_id(coin)
-                if "#Coinbase" in list_of_symbols:
-                    print("Coinbase here")
-                    remove_tag(list_of_symbols)
-                    print(final_list_of_coins)
-                    for coin in final_list_of_coins:
-                        get_coin_by_id(coin)
-                    # buy_order_binance(list_of_symbols)
-                if "#CoinbasePro" in list_of_symbols:
-                    print("CoinbasePro here")
-                    remove_tag(list_of_symbols)
-                    print(final_list_of_coins)
-                    for coin in final_list_of_coins:
-                        get_coin_by_id(coin)
+    if '1124574831' in str(event):
+        do_check(event)
 
 
-def remove_tag(list_of_symbols):
-    for word in list_of_symbols[:len(list_of_symbols) - 2]:
-        word = word.replace("#", "")
-        final_list_of_coins.append(word)
+def do_check(event):
+    if "Coinbase will list" in event.message.message or "Coinbase Pro will list" in event.message.message or "Binance listing" in event.message.message:
+        if "now available" not in event.message.message:
+            list_of_coins = re.findall(r'#\w+', event.message.message)
+            for coin in list_of_coins[:-2]:
+                buy_order_gateio(get_price(coin[1:]), list_of_coins, coin[1:])
 
 
-def get_coin_by_id(coin):
-    for a in cg.get_coins_list():
-        if a["symbol"] == coin.lower():
-            coin_symbol = a["id"]
-            get_list_of_exchanges(coin, coin_symbol)
+def get_price(coin):
+    url = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest"
+    parameters = {
+        "symbol": coin,
+        "convert": "USD"
+    }
+    headers = {
+      'Accepts': 'application/json',
+      'X-CMC_PRO_API_KEY': 'eef1c752-ca36-48d0-84d3-f7035343a8cc',
+    }
+    session = Session()
+    session.headers.update(headers)
+    try:
+        response = session.get(url, params=parameters)
+        return json.loads(response.text)["data"][coin]["quote"]["USD"]["price"]
+    except (ConnectionError, Timeout, TooManyRedirects) as e:
+        print(e)
 
 
-def get_list_of_exchanges(coin, coin_symbol):
-    list_of_exchanges = []
-    for i in cg.get_coin_by_id(id=coin_symbol)["tickers"]:
-        if i["market"]["name"] not in list_of_exchanges:
-            list_of_exchanges.append(i["market"]["name"])
+def gen_sign(method, url, query_string=None, payload_string=None):
+    key = '89ff6684f637400979e9e064d3d41955'
+    secret = '5d9002df05a03bf11d9a06940b603263a5ff9dabeea27cbcd602c51a20db20aa'
+    t = time.time()
+    m = hashlib.sha512()
+    m.update((payload_string or "").encode('utf-8'))
+    hashed_payload = m.hexdigest()
+    s = '%s\n%s\n%s\n%s\n%s' % (method, url, query_string or "", hashed_payload, t)
+    sign = hmac.new(secret.encode('utf-8'), s.encode('utf-8'), hashlib.sha512).hexdigest()
+    return {'KEY': key, 'Timestamp': str(t), 'SIGN': sign}
 
-    if "Gate.io" in list_of_exchanges:
-        buy_order_gateio(coin)
 
-
-
-
-def buy_order_gateio(coin):
-    configuration = gate_api.Configuration(
-        host="https://api.gateio.ws/api/v4",
-        key="89ff6684f637400979e9e064d3d41955",
-        secret="5d9002df05a03bf11d9a06940b603263a5ff9dabeea27cbcd602c51a20db20aa"
-    )
-
+def buy_order_gateio(price, list_of_coins, coin):
     host = "https://api.gateio.ws"
     prefix = "/api/v4"
     headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
-
     url = '/spot/order_book'
-    query_param = f'currency_pair={coin.upper()}_USDT'
-    print(query_param)
+    url1 = '/spot/orders'
+    query_param1 = ''
+    query_param = f'currency_pair={coin}_USDT'
     r = requests.request('GET', host + prefix + url + "?" + query_param, headers=headers)
-    coin_price = r.json()["asks"][2][0]
-    amount_coins_to_buy = round(1000 / float(coin_price), 2)
-    print(coin_price)
-    print(amount_coins_to_buy)
-
-    api_client = gate_api.ApiClient(configuration)
-
-    api_instance = gate_api.SpotApi(api_client)
-    order = gate_api.Order(currency_pair=f"{coin.lower}_usdt", amount=str(amount_coins_to_buy), price=coin_price, side="buy")
-
     try:
-        # Create an order
-        api_response = api_instance.create_order(order)
-        print(api_response)
-    except GateApiException as ex:
-        print("Gate api exception, label: %s, message: %s\n" % (ex.label, ex.message))
-    except ApiException as e:
-        print("Exception when calling SpotApi->create_order: %s\n" % e)
-
-
-def buy_order_binance(coin):
-    client = Client(binance_api_key, binance_api_secret)
-    avg_price = client.get_avg_price(symbol=coin + 'USDT')
-    amount_of_coins = round(1000 / int(float(avg_price["price"])), 2)
-    print(amount_of_coins)
-    order = client.order_market_buy(symbol=coin + 'USDT', quantity=amount_of_coins, newOrderRespType="FULL")
-    print(order)
-    final_list_of_coins = []
+        coin_price = r.json()["asks"][1][0]
+        amount = round(1000 / (len(list_of_coins) - 2) / float(coin_price), 2)
+        if ((float(coin_price) - float(price)) / float(price) * 100) < 25:
+            print(coin_price)
+            body = '{"currency_pair":"%s_USDT", "side":"buy", "amount":"%s","price":"%s"}' % (coin, amount, coin_price)
+            sign_headers = gen_sign('POST', prefix + url1, query_param1, body)
+            headers.update(sign_headers)
+            r = requests.request('POST', host + prefix + url1, headers=headers, data=body)
+            print(r.json())
+    except KeyError:
+        print(coin + " not in Gate.io")
 
 
 telegram_client.run_until_disconnected()
-
-# -------------------------------------------
-# Example:
-# 🔥Coinbase will list: ((AXS)) ((REQ)) ((TRU)) ((QUICK)) ((WLUNA))
-# 🔥 Axie Infinity (AXS), Request (REQ), TrueFi (TRU), Quickswap (QUICK) and Wrapped Luna (WLUNA) are now available on… (https://twitter.com/coinbase)
-#
-# #AXS #REQ #TRU #QUICK #WLUNA #Coinbase #Listing
-#
-# 🔥Coinbase Pro will list: ((AXS)) ((REQ)) ((TRU)) ((WLUNA))
-# 🔥 Axie Infinity (AXS), Request (REQ), TrueFi (TRU) and Wrapped Luna (WLUNA) are launching on Coinbase Pro (https://twitter.com/coinbase)
-#
-#
-# -------------------------------------------
