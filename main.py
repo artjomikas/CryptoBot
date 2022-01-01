@@ -54,8 +54,8 @@ def get_price(coin):
 
 
 def gen_sign(method, url, query_string=None, payload_string=None):
-    key = '89ff6684f637400979e9e064d3d41955'
-    secret = '5d9002df05a03bf11d9a06940b603263a5ff9dabeea27cbcd602c51a20db20aa'
+    key = 'API KEY FROM GATE IO'
+    secret = 'API SECRET KET FROM GATE IO'
     t = time.time()
     m = hashlib.sha512()
     m.update((payload_string or "").encode('utf-8'))
